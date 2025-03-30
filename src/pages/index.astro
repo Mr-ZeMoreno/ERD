@@ -1,11 +1,184 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+import Layout from "../layouts/Layout.astro";
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+type ButtonOptions =
+  | "Menu"
+  | "Save"
+  | "Undo"
+  | "Redo"
+  | "Delete"
+  | "Select"
+  | "Entity"
+  | "Attribute"
+  | "Relationship"
+  | "Label";
+
+const buttons: ButtonOptions[] = [
+  "Menu",
+  "Save",
+  "Undo",
+  "Redo",
+  "Delete",
+  "Select",
+  "Entity",
+  "Attribute",
+  "Relationship",
+  "Label",
+];
 ---
 
 <Layout>
-	<Welcome />
+  <!-- Aquí comienza el banner crack -->
+  <div class="h-14 w-screen bg-zinc-700 justify-center flex fixed">
+    <div class="h-full w-10/12 flex items-center justify-between">
+      <div class="gap-4 flex">
+        {
+          buttons.slice(0, 4).map((item) => (
+            <button
+              id={item}
+              class="h-9 w-24 flex flex-col items-center justify-center bg-zinc-50 rounded-md border-[1px] border-zinc-400 cursor-pointer"
+            >
+              <span>{item}</span>
+            </button>
+          ))
+        }
+      </div>
+      <div class="gap-4 flex">
+        {
+          buttons.slice(4).map((item) => (
+            <button
+              id={item}
+              class="h-9 w-24 flex flex-col items-center justify-center bg-zinc-50 rounded-md border-[1px] border-zinc-400 cursor-pointer"
+            >
+              <span>{item}</span>
+            </button>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+  <!-- Y aquí termina el banner crack -->
+
+  <div class="h-screen w-screen flex flex-col pt-14">
+    <div class="flex-grow h-full overflow-hidden">
+      <div class="h-full overflow-auto">
+        <canvas id="el-canvas" width="2000" height="1000" class="z-99"></canvas>
+      </div>
+    </div>
+  </div>
 </Layout>
+
+<script>
+  import { TextInput } from "../js/TextEditing";
+  import type { EntidadDraggleable } from "../js/EntidadDraggeable";
+  import { addNewEntity, Entity } from "../js/Entity";
+  import { Relacion } from "../js/Relacion";
+  import { getMousePosition } from "../js/utils/eventos";
+
+  const canvas = document.getElementById("el-canvas") as HTMLCanvasElement;
+
+  // UI Elements
+  const entityBtn = document.getElementById("Entity") as HTMLButtonElement;
+  const relationshipBtn = document.getElementById(
+    "Relationship"
+  ) as HTMLButtonElement;
+
+  // Objetos en pantalla
+  let entities: Entity[] = [];
+  let relaciones: Relacion[] = [];
+
+  // Entidad en movimiento
+  let draggedEntity: EntidadDraggleable | null = null;
+
+  // En estado de crear relaciones
+  let relationshipState = {
+    isInRelacionMode: false,
+    selectedEntity: null as Entity | null,
+  };
+
+  function getDraggableItems(): EntidadDraggleable[] {
+    return [...entities, ...relaciones];
+  }
+
+  // Clase editora de textos
+  new TextInput({
+    canvas,
+    getItems: () => getDraggableItems(),
+  });
+
+  entityBtn.addEventListener("click", () =>
+    addNewEntity({
+      canvas,
+      entities: () => entities,
+      relaciones: () => relaciones,
+      relationshipState: () => relationshipState,
+    })
+  );
+
+  relationshipBtn.addEventListener("click", () => {
+    relationshipState.isInRelacionMode = !relationshipState.isInRelacionMode;
+    relationshipBtn.classList.toggle(
+      "active-mode",
+      relationshipState.isInRelacionMode
+    );
+
+    if (
+      !relationshipState.isInRelacionMode &&
+      relationshipState.selectedEntity
+    ) {
+      relationshipState.selectedEntity.textColor = "black";
+      relationshipState.selectedEntity = null;
+    }
+  });
+
+  canvas.addEventListener("mousedown", (e) => {
+    const { x, y } = getMousePosition({ e, canvas });
+    getDraggableItems().forEach((item) => {
+      if (item.isMouseOver(x, y)) {
+        item.startDrag(x, y);
+        draggedEntity = item;
+      }
+    });
+  });
+
+  canvas.addEventListener("mousemove", (e) => {
+    if (!draggedEntity) return;
+
+    const rect = canvas.getBoundingClientRect();
+    draggedEntity.updateDrag(
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+      entities
+    );
+  });
+
+  ["mouseup", "mouseleave"].forEach((event) => {
+    canvas.addEventListener(event, () => {
+      if (draggedEntity) {
+        draggedEntity.endDrag();
+        draggedEntity = null;
+      }
+    });
+  });
+
+  // Game Loop
+  function gameLoop() {
+    canvas.getContext("2d")!.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw relationships first
+    relaciones.forEach((relacion) => relacion.draw());
+
+    // Update and draw entities
+    entities.forEach((entity, i) => {
+      for (let j = i + 1; j < entities.length; j++) {
+        entity.applyRepulsion(entities[j]);
+        entity.preventOverlap(entities[j]);
+      }
+      entity.draw();
+    });
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  gameLoop();
+</script>
